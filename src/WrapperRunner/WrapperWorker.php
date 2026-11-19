@@ -14,9 +14,11 @@ use Throwable;
 use function array_map;
 use function assert;
 use function clearstatcache;
+use function constant;
 use function count;
 use function file_get_contents;
 use function filesize;
+use function function_exists;
 use function implode;
 use function is_array;
 use function is_string;
@@ -45,6 +47,7 @@ final class WrapperWorker
     /** @var list<non-empty-string> */
     private array $currentlyExecuting = [];
     private Process $process;
+    private ?int $pid        = null;
     private int $inExecution = 0;
     private InputStream $input;
     private int $exitCode = -1;
@@ -177,6 +180,28 @@ final class WrapperWorker
     public function start(): void
     {
         $this->process->start();
+        $this->pid = $this->process->getPid();
+    }
+
+    public function signal(int $signal): void
+    {
+        if ($this->pid === null || $this->pid <= 1 || ! function_exists('posix_kill')) {
+            return;
+        }
+
+        $sendSignal = 'posix_kill';
+        if ($sendSignal(-$this->pid, $signal) || ! $this->process->isRunning()) {
+            return;
+        }
+
+        // The parent can be interrupted before the wrapper establishes its group.
+        $sendSignal($this->pid, $signal);
+    }
+
+    public function kill(): void
+    {
+        $this->signal(constant('SIGKILL'));
+        $this->process->stop(0);
     }
 
     public function getWorkerCrashedException(?Throwable $previousException = null): WorkerCrashedException

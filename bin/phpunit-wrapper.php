@@ -7,6 +7,7 @@ use ParaTest\WrapperRunner\WrapperWorker;
 
 (static function (): void {
     $getopt = getopt('', [
+        'process-group',
         'status-file:',
         'progress-file:',
         'unexpected-output-file:',
@@ -16,6 +17,11 @@ use ParaTest\WrapperRunner\WrapperWorker;
         'testdox-file:',
         'phpunit-argv:',
     ]);
+
+    // PHPUnit's isolated test processes inherit the worker's group.
+    if (isset($getopt['process-group']) && function_exists('posix_setpgid') && !posix_setpgid(0, 0)) {
+        throw new RuntimeException('Unable to create the worker process group.');
+    }
 
     $composerAutoloadFiles = [
         dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'autoload.php',

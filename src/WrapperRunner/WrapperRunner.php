@@ -103,10 +103,13 @@ final class WrapperRunner implements RunnerInterface
     private CodeCoverageFilterRegistry $codeCoverageFilterRegistry;
     /** @var non-empty-string */
     private string $runTmpDir;
+    private ?int $terminationSignal = null;
+    private bool $runningWorkers    = false;
 
     public function __construct(
         private readonly Options $options,
-        private readonly OutputInterface $output
+        private readonly OutputInterface $output,
+        bool $forwardSignals = false,
     ) {
         $this->printer = new ResultPrinter($output, $options);
 
@@ -128,6 +131,9 @@ final class WrapperRunner implements RunnerInterface
         }
 
         $parameters[] = $wrapper;
+        if ($forwardSignals) {
+            $parameters[] = '--process-group';
+        }
 
         $this->parameters                 = $parameters;
         $this->codeCoverageFilterRegistry = new CodeCoverageFilterRegistry();
@@ -146,12 +152,47 @@ final class WrapperRunner implements RunnerInterface
         $this->pending = $suiteLoader->tests;
         $this->printer->setTestCount($suiteLoader->testCount);
         $this->printer->start();
-        $this->runTmpDir = $this->createRunTmpDir();
+        $this->runTmpDir      = $this->createRunTmpDir();
+        $this->runningWorkers = true;
         $this->startWorkers();
         $this->assignAllPendingTests();
         $this->waitForAllToFinish();
 
-        return $this->complete($result);
+        if ($this->workers === []) {
+            $this->runningWorkers = false;
+        }
+
+        $signal = $this->terminationSignal;
+        if ($signal === null) {
+            return $this->complete($result);
+        }
+
+        foreach ($this->workers as $worker) {
+            $worker->signal($signal);
+        }
+
+        // Give every group the same grace period, including children whose worker already exited.
+        usleep(250000);
+        foreach ($this->workers as $worker) {
+            $worker->kill();
+        }
+
+        $this->workers = [];
+        $this->clearTemporaryFiles();
+        $this->runningWorkers = false;
+
+        return 128 + $signal;
+    }
+
+    public function requestTermination(int $signal): bool
+    {
+        if (! $this->runningWorkers) {
+            return false;
+        }
+
+        $this->terminationSignal ??= $signal;
+
+        return true;
     }
 
     /**
@@ -179,7 +220,7 @@ final class WrapperRunner implements RunnerInterface
 
     private function startWorkers(): void
     {
-        for ($token = 1; $token <= $this->options->processes; ++$token) {
+        for ($token = 1; $this->terminationSignal === null && $token <= $this->options->processes; ++$token) {
             $this->startWorker($token);
         }
     }
@@ -190,7 +231,12 @@ final class WrapperRunner implements RunnerInterface
 
         while (count($this->pending) > 0 && count($this->workers) > 0) {
             foreach ($this->workers as $token => $worker) {
-                if (! $worker->isRunning()) {
+                $running = $worker->isRunning();
+                if ($this->terminationSignal !== null) {
+                    return;
+                }
+
+                if (! $running) {
                     throw $worker->getWorkerCrashedException();
                 }
 
@@ -204,6 +250,10 @@ final class WrapperRunner implements RunnerInterface
                 // the worker may exceed the batch size by the tests of the last group it was assigned
                 if ($batchSize !== 0 && $this->batches[$token] >= $batchSize) {
                     $this->destroyWorker($token);
+                    if ($this->terminationSignal !== null) {
+                        return;
+                    }
+
                     $worker = $this->startWorker($token);
                 }
 
@@ -249,7 +299,12 @@ final class WrapperRunner implements RunnerInterface
         $stopped = [];
         while (count($this->workers) > 0) {
             foreach ($this->workers as $index => $worker) {
-                if ($worker->isRunning()) {
+                $running = $worker->isRunning();
+                if ($this->terminationSignal !== null) {
+                    return;
+                }
+
+                if ($running) {
                     if (! isset($stopped[$index]) && $worker->isFree()) {
                         $worker->stop();
                         $stopped[$index] = true;
@@ -316,6 +371,10 @@ final class WrapperRunner implements RunnerInterface
         $this->workers[$token]->stop();
         // We need to wait for ApplicationForWrapperWorker::end to end
         while ($this->workers[$token]->isRunning()) {
+            if ($this->terminationSignal !== null) {
+                return;
+            }
+
             usleep(self::CYCLE_SLEEP);
         }
 
@@ -418,6 +477,13 @@ final class WrapperRunner implements RunnerInterface
             $testResultSum,
         );
 
+        $this->clearTemporaryFiles();
+
+        return $exitcode;
+    }
+
+    private function clearTemporaryFiles(): void
+    {
         $this->clearFiles($this->statusFiles);
         $this->clearFiles($this->progressFiles);
         $this->clearFiles($this->unexpectedOutputFiles);
@@ -428,8 +494,6 @@ final class WrapperRunner implements RunnerInterface
         $this->clearFiles($this->teamcityFiles);
         $this->clearFiles($this->testdoxFiles);
         rmdir($this->runTmpDir);
-
-        return $exitcode;
     }
 
     /**

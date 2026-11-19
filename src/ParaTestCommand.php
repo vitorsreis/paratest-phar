@@ -16,6 +16,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 use function assert;
 use function class_exists;
+use function constant;
+use function function_exists;
 use function is_string;
 use function is_subclass_of;
 use function method_exists;
@@ -29,6 +31,8 @@ final class ParaTestCommand extends Command
     private const array KNOWN_RUNNERS = [
         'WrapperRunner' => WrapperRunner::class,
     ];
+
+    private ?WrapperRunner $activeRunner = null;
 
     /** @param non-empty-string $cwd */
     public function __construct(
@@ -93,7 +97,35 @@ final class ParaTestCommand extends Command
 
         $runnerClass = $this->getRunnerClass($input);
 
-        return (new $runnerClass($options, $output))->run();
+        if ($runnerClass !== WrapperRunner::class || $this->getSubscribedSignals() === []) {
+            return (new $runnerClass($options, $output))->run();
+        }
+
+        $this->activeRunner = new WrapperRunner($options, $output, true);
+        try {
+            return $this->activeRunner->run();
+        } finally {
+            $this->activeRunner = null;
+        }
+    }
+
+    /** @return list<int> */
+    public function getSubscribedSignals(): array
+    {
+        if (! function_exists('pcntl_signal') || ! function_exists('posix_setpgid') || ! function_exists('posix_kill')) {
+            return [];
+        }
+
+        return [constant('SIGINT'), constant('SIGTERM')];
+    }
+
+    public function handleSignal(int $signal, int|false $previousExitCode = 0): int|false
+    {
+        if ($this->activeRunner?->requestTermination($signal) === true) {
+            return false;
+        }
+
+        return 128 + $signal;
     }
 
     private function displayHelp(OutputInterface $output): int
