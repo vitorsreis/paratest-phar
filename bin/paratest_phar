@@ -1,0 +1,19 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use ParaTest\ParaTestCommand;
+use ParaTest\Util\PharHelper;
+
+$phar = Phar::running(false);
+assert($phar !== '');
+define('__PARATEST_PHAR__', str_replace(DIRECTORY_SEPARATOR, '/', $phar));
+
+$cwd = getcwd();
+assert(is_string($cwd));
+
+require_once dirname(__DIR__, 1) . '/src/Util/PharHelper.php';
+
+PharHelper::bootstrap();
+ParaTestCommand::applicationFactory($cwd)->run();

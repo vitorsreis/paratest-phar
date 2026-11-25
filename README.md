@@ -34,6 +34,21 @@ This is because of the following reasons:
 After installation, the binary can be found at `vendor/bin/paratest`. Run it
 with `--help` option to see a complete list of the available options.
 
+## PHAR
+
+Download the PHAR from [GitHub Releases](https://github.com/paratestphp/paratest/releases) and run it from your project directory.
+
+```bash
+php paratest.phar
+php paratest.phar phpunit.phar --configuration phpunit.xml
+```
+
+The PHAR requires `zlib`. It uses the project's Composer PHPUnit by default and also accepts a standalone PHPUnit PHAR.
+
+Use `paratest.phar` directly from the project or configure the same file as the PHPUnit interpreter in PhpStorm. Pass the PHPUnit executable or a standalone `phpunit.phar` when the IDE provides it.
+
+To build locally, install the Composer dependencies and run `box compile`.
+
 ## Test token
 
 The `TEST_TOKEN` environment variable is guaranteed to have a value that is different
@@ -70,6 +85,15 @@ If you have `xDebug` installed, activating it by the environment variable is eno
 
 ```
 XDEBUG_MODE=coverage vendor/bin/paratest
+```
+
+### Custom driver
+
+A custom driver configured with PHPUnit's `<coverage driver="...">` attribute is used by every worker process,
+and its coverage is merged as usual. The driver class must be autoloadable in both ParaTest and the workers:
+
+```xml
+<coverage driver="App\Tests\MyCoverageDriver"/>
 ```
 
 ## Initial setup for all tests
@@ -190,7 +214,7 @@ ParaTest provides a dedicated binary to work with PHPStorm; follow these steps t
 1. Be sure you have PHPUnit already configured in PHPStorm: https://www.jetbrains.com/help/phpstorm/using-phpunit-framework.html#php_test_frameworks_phpunit_integrate
 2. Go to `Run` -> `Edit configurations...`
 3. Select `Add new Configuration`, select the `PHPUnit` type and name it `ParaTest`
-4. In the `Command Line` -> `Interpreter options` add `./vendor/bin/paratest_for_phpstorm`
+4. In the `Command Line` -> `Interpreter options` add `./vendor/bin/paratest_for_phpstorm` or the path to `paratest.phar`
 5. Any additional ParaTest options you want to pass to ParaTest should go within the `Test runner` -> `Test runner options` section
 
 You should now have a `ParaTest` run within your configurations list.

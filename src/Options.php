@@ -7,6 +7,7 @@ namespace ParaTest;
 use Fidry\CpuCoreCounter\CpuCoreCounter;
 use Fidry\CpuCoreCounter\NumberOfCpuCoreNotFound;
 use InvalidArgumentException;
+use ParaTest\Util\PharHelper;
 use ParaTest\WrapperRunner\ShardDistribution;
 use PHPUnit\TextUI\Configuration\Builder;
 use PHPUnit\TextUI\Configuration\Configuration;
@@ -24,6 +25,7 @@ use function array_key_exists;
 use function array_shift;
 use function assert;
 use function count;
+use function defined;
 use function dirname;
 use function escapeshellarg;
 use function file_exists;
@@ -948,6 +950,13 @@ final readonly class Options
     /** @return non-empty-string $phpunit the path to phpunit */
     private static function getPhpunitBinary(): string
     {
+        if (defined('__PARATEST_PHAR__')) {
+            $phpunit = PharHelper::getResolvedPhpunitBinary();
+            assert($phpunit !== '');
+
+            return $phpunit;
+        }
+
         $tryPaths = [
             dirname(__DIR__, 3) . '/bin/phpunit',
             dirname(__DIR__, 3) . '/phpunit/phpunit/phpunit',

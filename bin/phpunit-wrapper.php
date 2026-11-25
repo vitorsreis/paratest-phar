@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use ParaTest\Util\PharHelper;
 use ParaTest\WrapperRunner\ApplicationForWrapperWorker;
 use ParaTest\WrapperRunner\WrapperWorker;
 
@@ -17,18 +18,20 @@ use ParaTest\WrapperRunner\WrapperWorker;
         'phpunit-argv:',
     ]);
 
-    $composerAutoloadFiles = [
-        dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'autoload.php',
-        dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php',
-        dirname(__DIR__) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php',
-    ];
+    if (! defined('__PARATEST_PHAR__')) {
+        $composerAutoloadFiles = [
+            dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'autoload.php',
+            dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php',
+            dirname(__DIR__) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php',
+        ];
 
-    foreach ($composerAutoloadFiles as $file) {
-        if (file_exists($file)) {
-            define('PHPUNIT_COMPOSER_INSTALL', $file);
-            require_once $file;
+        foreach ($composerAutoloadFiles as $file) {
+            if (file_exists($file)) {
+                define('PHPUNIT_COMPOSER_INSTALL', $file);
+                require_once $file;
 
-            break;
+                break;
+            }
         }
     }
 
@@ -46,6 +49,10 @@ use ParaTest\WrapperRunner\WrapperWorker;
     assert(isset($getopt['phpunit-argv']) && is_string($getopt['phpunit-argv']));
     $phpunitArgv = unserialize($getopt['phpunit-argv'], ['allowed_classes' => false]);
     assert(is_array($phpunitArgv));
+
+    if (defined('__PARATEST_PHAR__')) {
+        PharHelper::bootstrapWorker($phpunitArgv);
+    }
 
     $application = new ApplicationForWrapperWorker(
         $phpunitArgv,

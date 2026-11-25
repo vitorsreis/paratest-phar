@@ -1,0 +1,39 @@
+name: "Build release PHARs"
+
+on:
+  release:
+    types:
+      - "published"
+
+permissions:
+  contents: write
+
+jobs:
+  draft-release:
+    runs-on: "ubuntu-latest"
+
+    steps:
+      - uses: "actions/checkout@v7"
+        with:
+          ref: "${{ github.event.release.tag_name }}"
+          persist-credentials: false
+
+      - uses: "shivammathur/setup-php@v2"
+        with:
+          php-version: "8.4"
+          extensions: "pcntl, posix"
+          coverage: "pcov"
+
+      - name: "Install dependencies"
+        run: composer install --no-dev --no-interaction --prefer-dist
+
+      - name: "Build and check the PHAR"
+        env:
+          PARATEST_EXPECTED_VERSION: ${{ github.event.release.tag_name }}
+        run: "bash .github/scripts/phar-smoke.sh"
+
+      - name: "Attach the PHAR to the release"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" build/paratest.phar --clobber

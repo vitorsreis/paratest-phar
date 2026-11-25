@@ -6,6 +6,7 @@ namespace ParaTest;
 
 use InvalidArgumentException;
 use Jean85\PrettyVersions;
+use ParaTest\Util\PharHelper;
 use ParaTest\WrapperRunner\WrapperRunner;
 use PHPUnit\Runner\Version;
 use Symfony\Component\Console\Application;
@@ -16,6 +17,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 use function assert;
 use function class_exists;
+use function defined;
 use function is_string;
 use function is_subclass_of;
 use function method_exists;
@@ -43,9 +45,11 @@ final class ParaTestCommand extends Command
     {
         $application = new Application();
         $command     = new self($cwd, self::COMMAND_NAME);
-
+        $version     = defined('__PARATEST_PHAR__')
+            ? PharHelper::getVersion()
+            : PrettyVersions::getVersion('brianium/paratest')->getPrettyVersion();
         $application->setName('ParaTest');
-        $application->setVersion(PrettyVersions::getVersion('brianium/paratest')->getPrettyVersion());
+        $application->setVersion($version);
         // @phpstan-ignore function.alreadyNarrowedType (can be removed when dropping support for Symfony 7.3)
         if (method_exists($application, 'addCommand')) {
             $application->addCommand($command);
@@ -76,6 +80,10 @@ final class ParaTestCommand extends Command
     {
         $application = $this->getApplication();
         assert($application !== null);
+
+        if (defined('__PARATEST_PHAR__')) {
+            PharHelper::bootstrapCommand($this->cwd);
+        }
 
         $output->write(sprintf(
             "%s upon %s\n\n",
