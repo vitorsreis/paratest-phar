@@ -42,6 +42,7 @@ use PHPUnit\Util\ExcludeList;
 
 use function assert;
 use function class_exists;
+use function defined;
 use function explode;
 use function file_put_contents;
 use function function_exists;
@@ -148,7 +149,10 @@ final class ApplicationForWrapperWorker
             return;
         }
 
-        ExcludeList::addDirectory(__DIR__);
+        if (! defined('__PARATEST_PHAR__')) {
+            ExcludeList::addDirectory(__DIR__);
+        }
+
         $emitter = EventFacade::emitter();
         $emitter->applicationStarted();
 

@@ -43,11 +43,13 @@ use function array_values;
 use function assert;
 use function bin2hex;
 use function count;
+use function defined;
 use function dirname;
 use function file_get_contents;
 use function filesize;
 use function implode;
 use function is_file;
+use function is_string;
 use function max;
 use function mkdir;
 use function preg_match;
@@ -110,10 +112,10 @@ final class WrapperRunner implements RunnerInterface
     ) {
         $this->printer = new ResultPrinter($output, $options);
 
-        $wrapper = realpath(
-            dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'phpunit-wrapper.php',
-        );
-        assert($wrapper !== false);
+        $wrapper = defined('__PARATEST_PHAR__')
+            ? __PARATEST_PHAR__
+            : realpath(dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'phpunit-wrapper.php');
+        assert(is_string($wrapper) && $wrapper !== '');
         $phpFinder = new PhpExecutableFinder();
         $phpBin    = $phpFinder->find(false);
         assert($phpBin !== false);
@@ -135,7 +137,10 @@ final class WrapperRunner implements RunnerInterface
 
     public function run(): int
     {
-        ExcludeList::addDirectory(dirname(__DIR__));
+        if (! defined('__PARATEST_PHAR__')) {
+            ExcludeList::addDirectory(dirname(__DIR__));
+        }
+
         $suiteLoader = new SuiteLoader(
             $this->options,
             $this->output,
